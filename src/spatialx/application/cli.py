@@ -9,7 +9,8 @@ from typing import Sequence, Optional
 import cv2
 
 from spatialx.camera import CameraManager
-from spatialx.core.exceptions import CameraError
+from spatialx.core.exceptions import CameraError, VisionError
+from spatialx.vision import DEFAULT_MODEL_PATH, HandLandmarker
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +30,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=15,
         help="Number of frames to capture during a headless capture run (default: 15).",
+    )
+    parser.add_argument(
+        "--detect",
+        action="store_true",
+        help="Run MediaPipe hand detection over captured frames (headless demo).",
+    )
+    parser.add_argument(
+        "--model-path",
+        type=str,
+        default=DEFAULT_MODEL_PATH,
+        help="Path to the MediaPipe hand landmarker model file.",
+    )
+    parser.add_argument(
+        "--num-hands",
+        type=int,
+        default=2,
+        help="Number of hands to track (default: 2).",
     )
     parser.add_argument(
         "--preview",
@@ -82,6 +100,50 @@ def _preview(manager: CameraManager) -> None:
     cv2.destroyAllWindows()
 
 
+def _run_detection(
+    frames: list,
+    model_path: str,
+    num_hands: int,
+) -> int:
+    """Run the MediaPipe hand landmarker over captured frames.
+
+    Returns:
+        Process exit code: 0 on success, 4 on inference failure.
+    """
+    landmarker = HandLandmarker(model_path=model_path, num_hands=num_hands)
+    frames_with_hands = 0
+    total_hands = 0
+    inference_times_ms: list[float] = []
+    try:
+        for frame in frames:
+            detection = landmarker.detect(frame.image, timestamp_ms=int(round(frame.timestamp * 1000)))
+            if detection is None:
+                continue
+            if detection.inference_time_ms is not None:
+                inference_times_ms.append(detection.inference_time_ms)
+            if detection.hands:
+                frames_with_hands += 1
+                total_hands += len(detection.hands)
+    except VisionError as error:
+        print(f"SpatialX vision error: {error}")
+        return 4
+    finally:
+        landmarker.close()
+    elapsed = 0.0
+    if frames:
+        start = frames[0].timestamp
+        end = frames[-1].timestamp
+        elapsed = end - start if end > start else 0.0
+    fps = len(frames) / elapsed if elapsed > 0 else 0.0
+    avg_inference = sum(inference_times_ms) / len(inference_times_ms) if inference_times_ms else 0.0
+    print(
+        f"SpatialX vision OK: model={model_path} frames_captured={len(frames)} "
+        f"frames_with_hands={frames_with_hands} total_hands={total_hands} "
+        f"avg_inference_ms={avg_inference:.2f} fps={fps:.2f}"
+    )
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """Run the SpatialX CLI. Returns a process exit code."""
     parser = build_parser()
@@ -109,6 +171,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     f"{args.camera_index}."
                 )
                 return 3
+            if args.detect:
+                return _run_detection(
+                    frames, model_path=args.model_path, num_hands=args.num_hands
+                )
             fps = len(frames) / elapsed if elapsed > 0 else 0.0
             print(
                 f"SpatialX camera OK: index={manager.device_index} "

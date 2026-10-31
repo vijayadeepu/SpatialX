@@ -13,3 +13,7 @@ class CameraError(SpatialXError):
 
 class ConfigurationError(SpatialXError):
     """Raised when configuration files are missing or invalid."""
+
+
+class VisionError(SpatialXError):
+    """Raised when hand landmark inference or landmark processing fails."""

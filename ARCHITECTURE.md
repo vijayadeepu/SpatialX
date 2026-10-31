@@ -10,8 +10,8 @@ under `src/spatialx/`.
 | Module | Responsibility |
 |---|---|
 | `camera` | Device discovery, frame capture, lifecycle, FPS monitoring. |
-| `vision` | Hand detection, tracking, landmarks, confidence. |
-| `spatial` | Coordinate normalization, transformation, depth, orientation. |
+| `vision` | Hand detection, landmark extraction, skeleton visualization. |
+| `spatial` | Spatial coordinate normalization, transformation, depth, orientation. |
 | `gestures` | Geometric gesture recognition, two-hand logic. |
 | `motion` | One Euro filtering, smoothing, prediction. |
 | `interaction` | Object selection, grab, translate, rotate, scale states. |
@@ -21,27 +21,36 @@ under `src/spatialx/`.
 | `configuration` | JSON settings loading. |
 | `core` | Errors and cross-cutting primitives. |
 
-## Current Data Flow (Milestone 0)
+## Current Data Flow — Milestones 0/1
 
 ```
 main.py / CLI
-    -> CameraManager (camera module)
-        -> Frame (timestamped image)
-    -> stats (FPS, latency)
+    -> CameraManager (camera module) -> Frame (timestamped image)
+    -> HandLandmarker (vision module, MediaPipe Tasks, VIDEO mode)
+        -> HandDetection (hands, timestamp_ms, inference_time_ms)
+        -> TrackedHand[] (side + 21 landmarks)
+        -> draw_hand_skeleton (vision module, OpenCV)
+    -> reporting (FPS, latency)
 ```
 
-Future flow adds vision inference between capture and spatial mathematics.
+Future flow inserts spatial mathematics between `HandDetection` and interaction.
+
+## Vision Module Detail
+
+- `spatialx.vision.hand_landmarker`: MediaPipe Tasks wrapper; `HandLandmarker`,
+  `HandDetection`, `TrackedHand`, `Landmark`, `extract_hands`, model default path.
+- `spatialx.vision.visualization`: OpenCV-based skeleton drawing.
 
 ## Design Decisions
 
 - Strict module boundaries; no cross-module leakage yet.
-- Camera ownership stays inside `spatialx.camera`.
-- Errors derive from `SpatialXError`.
+- Vision emits SpatialX-native data (`TrackedHand`) — never raw MediaPipe internals.
+- Errors derive from `SpatialXError`; inference failures surface as `VisionError`.
 
 ## Dependencies
 
-- OpenCV — capture.
-- MediaPipe Tasks — hand landmarks (Milestone 1).
+- OpenCV — capture and skeleton drawing.
+- MediaPipe Tasks — hand landmarks (Milestone 1, complete).
 - NumPy / SciPy — mathematics.
 - One Euro Filter — motion (Milestone 3).
 - Panda3D / PySide6 — rendering / UI (upcoming milestones).
