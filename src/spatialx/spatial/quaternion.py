@@ -89,3 +89,8 @@ def rotate_vector(q: Quaternion, vector: np.ndarray) -> np.ndarray:
 def smooth_rotation(q1: Quaternion, q2: Quaternion, smoothing: float = 0.5) -> Quaternion:
     """Smoothly interpolate between two quaternions (slerp blend)."""
     return slerp(q1, q2, smoothing)
+
+
+def relative_rotation(q_self: Quaternion, q_other: Quaternion) -> Quaternion:
+    """Rotation that takes the orientation of ``q_self`` to ``q_other``."""
+    return quaternion_multiply(q_other, quaternion_conjugate(q_self))

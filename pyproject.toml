@@ -15,6 +15,7 @@ dependencies = [
     "mediapipe>=0.10.14",
     "numpy>=1.26.0,<2.0.0",
     "scipy>=1.11.0",
+    "panda3d>=1.10.0",
 ]
 
 [project.optional-dependencies]

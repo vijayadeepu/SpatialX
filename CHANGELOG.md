@@ -1,5 +1,40 @@
 # Changelog — SpatialX
 
+## Unreleased — audit repair pass (M0–M5)
+
+### Fixed
+
+- Model asset resolution: `DEFAULT_MODEL_PATH` pointed at a nonexistent
+  `<repo>/src/assets/...` path. Added `resolve_model_path()` with verified
+  existence checks, `SPATIALX_MODEL_PATH` override, and a clear `VisionError`
+  (searched locations + download URL). `HandLandmarker()` auto-resolves.
+- BGR/RGB channel order in `HandLandmarker.detect()`: frames are now converted
+  with `cv2.COLOR_BGR2RGB` before MediaPipe inference (BGR input silently
+  produced zero hand detections on live frames).
+- CLI validates the model before opening the camera and reports the resolved
+  model path; `--model-path` defaults to auto-resolution.
+- Spatial camera space: `landmark_camera_space` returned unit-hybrid values
+  `(x·W−cx)·fx/W` with X/Y lacking depth. Corrected to camera pixel space
+  `[u−cx, v−cy, z·W]` (principal-point origin; wrist-relative, width-scaled,
+  **non-metric** Z).
+- Spatial geometry scale mixing: normalized x (per-width) and y (per-height)
+  distorted distances and cross products. Hand-relative vectors and palm
+  orientation now compute in isotropic pixel space.
+- `palm_orientation` returned an unnormalized axis times angle; now unit
+  axis × angle (correct rotation vector for quaternion conversion).
+- `relative_depth` duplicated `hand_relative_vectors`; now returns 1-D
+  wrist-relative width-scaled depth offsets.
+
+### Added
+
+- Camera mirroring (`mirror=True`) for selfie-view pipelines in
+  `normalized_to_pixel`, `landmark_camera_space`, `hand_relative_vectors`,
+  `palm_orientation`; CLI cursor demo uses mirrored coordinates.
+- `camera_ray()` unit pinhole ray directions; `normalized_to_pixel()`.
+- `CameraCalibration.for_image()` nominal intrinsics from image size and
+  assumed HFOV (documented as assumption); typed optional extrinsics with
+  `effective_rotation` / `effective_translation` accessors.
+
 ## 0.5.0 — 2026-10-31
 
 ### Added

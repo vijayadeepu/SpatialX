@@ -1,35 +1,47 @@
-"""Spatial coordinate mathematics for SpatialX."""
+"""Spatial coordinate mathematics for SpatialX.
 
-from spatialx.spatial.coordinates import (
-    CameraCalibration,
-    hand_relative_vectors,
-    hand_velocity,
-    landmark_camera_space,
-    palm_orientation,
-    relative_depth,
-)
-from spatialx.spatial.quaternion import (
-    Quaternion,
-    rotate_vector,
-    rotation_vector_to_quaternion,
-    slerp,
-    smooth_rotation,
-    quaternion_conjugate,
-    quaternion_multiply,
-)
+Exports are resolved lazily (PEP 562) so that importing lightweight
+submodules such as ``spatialx.spatial.quaternion`` does not pull the
+vision stack (MediaPipe). This keeps the rendering process free of
+MediaPipe, which is required because MediaPipe's bundled LLVM and
+Panda3D's runtime corrupt each other's global state when both render and
+track inside a single process (see PROJECT_STATUS.md, Priority 3).
+"""
 
-__all__ = [
-    "CameraCalibration",
-    "Quaternion",
-    "hand_relative_vectors",
-    "hand_velocity",
-    "landmark_camera_space",
-    "palm_orientation",
-    "quaternion_conjugate",
-    "quaternion_multiply",
-    "relative_depth",
-    "rotate_vector",
-    "rotation_vector_to_quaternion",
-    "smooth_rotation",
-    "slerp",
-]
+from importlib import import_module
+from typing import Any
+
+_EXPORTS = {
+    "CameraCalibration": "coordinates",
+    "camera_ray": "coordinates",
+    "hand_relative_vectors": "coordinates",
+    "hand_velocity": "coordinates",
+    "landmark_camera_space": "coordinates",
+    "normalized_to_pixel": "coordinates",
+    "palm_orientation": "coordinates",
+    "relative_depth": "coordinates",
+    "Quaternion": "quaternion",
+    "quaternion_conjugate": "quaternion",
+    "quaternion_multiply": "quaternion",
+    "relative_rotation": "quaternion",
+    "rotate_vector": "quaternion",
+    "rotation_vector_to_quaternion": "quaternion",
+    "smooth_rotation": "quaternion",
+    "slerp": "quaternion",
+}
+
+__all__ = sorted(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve a spatial export lazily on first access."""
+    module_name = _EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(f"{__name__}.{module_name}"), name)
+    globals()[name] = value  # cache for subsequent lookups
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))
