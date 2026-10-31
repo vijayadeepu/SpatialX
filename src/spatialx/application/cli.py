@@ -10,6 +10,8 @@ import cv2
 
 from spatialx.camera import CameraManager
 from spatialx.core.exceptions import CameraError, VisionError
+from spatialx.rendering import VirtualCursor, estimate_jitter
+from spatialx.spatial import CameraCalibration, landmark_camera_space
 from spatialx.vision import DEFAULT_MODEL_PATH, HandLandmarker
 
 
@@ -47,6 +49,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=2,
         help="Number of hands to track (default: 2).",
+    )
+    parser.add_argument(
+        "--cursor-demo",
+        action="store_true",
+        help="Run the virtual cursor pipeline over captured frames (headless demo).",
+    )
+    parser.add_argument(
+        "--cursor-sensitivity",
+        type=float,
+        default=1.0,
+        help="Cursor sensitivity multiplier (default: 1.0).",
     )
     parser.add_argument(
         "--preview",
@@ -144,6 +157,48 @@ def _run_detection(
     return 0
 
 
+def _run_cursor_demo(
+    frames: list,
+    model_path: str,
+    num_hands: int,
+    sensitivity: float,
+) -> int:
+    """Run the virtual cursor pipeline over captured frames.
+
+    Returns:
+        Process exit code: 0 on success, 4 on inference failure.
+    """
+    landmarker = HandLandmarker(model_path=model_path, num_hands=num_hands)
+    cursor = VirtualCursor(sensitivity=sensitivity)
+    positions: list = []
+    try:
+        for frame in frames:
+            detection = landmarker.detect(frame.image, timestamp_ms=int(round(frame.timestamp * 1000)))
+            if detection is None or not detection.hands:
+                continue
+            wrist = detection.hands[0].landmarks[0]
+            origin_camera = landmark_camera_space(
+                wrist,
+                CameraCalibration(),
+                image_width=frame.width,
+                image_height=frame.height,
+            )
+            positions.append(cursor.update(origin_camera, timestamp_s=frame.timestamp))
+    except VisionError as error:
+        print(f"SpatialX vision error: {error}")
+        return 4
+    finally:
+        landmarker.close()
+    final_position = positions[-1] if positions else None
+    jitter = estimate_jitter(positions) if positions else 0.0
+    print(
+        f"SpatialX cursor OK: frames_captured={len(frames)} cursor_positions="
+        f"{len(positions)} final_position={final_position.tolist() if final_position is not None else None} "
+        f"jitter={jitter:.6f}"
+    )
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """Run the SpatialX CLI. Returns a process exit code."""
     parser = build_parser()
@@ -174,6 +229,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if args.detect:
                 return _run_detection(
                     frames, model_path=args.model_path, num_hands=args.num_hands
+                )
+            if args.cursor_demo:
+                return _run_cursor_demo(
+                    frames,
+                    model_path=args.model_path,
+                    num_hands=args.num_hands,
+                    sensitivity=args.cursor_sensitivity,
                 )
             fps = len(frames) / elapsed if elapsed > 0 else 0.0
             print(

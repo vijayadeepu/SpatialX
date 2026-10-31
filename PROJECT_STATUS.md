@@ -2,11 +2,27 @@
 
 ## Current Milestone
 
+**Milestone 3 — Virtual 3D Cursor: COMPLETE (software)**
+
 **Milestone 2 — Spatial Coordinate Engine: COMPLETE (software)**
 
 **Milestone 1 — Real-Time Hand Tracking: COMPLETE**
 
 **Milestone 0 — Environment and Project Foundation: COMPLETE**
+
+## Completed Tasks — Milestone 3
+
+- [x] One Euro filter with configurable min cutoff, beta, derivative cutoff.
+- [x] Virtual cursor mapping hand origins to filtered positions.
+- [x] Cursor sensitivity scaling and boundary clamping.
+- [x] Cursor jitter estimation.
+
+## Completed Tasks — Milestone 3
+
+- [x] One Euro filter with configurable min cutoff, beta, derivative cutoff.
+- [x] Virtual cursor mapping hand origins to filtered positions.
+- [x] Cursor sensitivity scaling and boundary clamping.
+- [x] Cursor jitter estimation.
 
 ## Completed Tasks — Milestone 2
 
@@ -32,8 +48,8 @@
 
 ## Pending Tasks
 
-- Milestone 3 — Virtual 3D cursor (One Euro filtering, cursor jitter).
 - Milestone 4 — First object manipulation.
+- Milestone 3 rendering integration: Panda3D 3D scene / virtual object.
 - Milestones 5–11 — incremental product expansion.
 
 ## Known Bugs
