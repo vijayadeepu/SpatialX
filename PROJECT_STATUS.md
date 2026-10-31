@@ -2,6 +2,8 @@
 
 ## Current Milestone
 
+**Milestone 5 — Three-Dimensional Rotation: COMPLETE (software)**
+
 **Milestone 4 — First Object Manipulation: COMPLETE (software)**
 
 **Milestone 3 — Virtual 3D Cursor: COMPLETE (software)**
@@ -11,6 +13,11 @@
 **Milestone 1 — Real-Time Hand Tracking: COMPLETE**
 
 **Milestone 0 — Environment and Project Foundation: COMPLETE**
+
+## Completed Tasks — Milestone 5
+
+- [x] Quaternion representation, conversion, composition, slerp, rotation.
+- [x] Slerp-based rotation smoothing.
 
 ## Completed Tasks — Milestone 4
 
@@ -30,6 +37,7 @@
 - [x] Camera calibration model (`CameraCalibration`, camera matrix).
 - [x] Normalized landmark → camera space conversion.
 - [x] Hand-relative landmark vectors, relative depth, palm orientation, hand velocity.
+- [x] Quaternion rotation mathematics (Milestone 5).
 
 ## Completed Tasks — Milestone 1
 
@@ -38,7 +46,6 @@
 
 ## Pending Tasks
 
-- Milestone 5 — Three-Dimensional Rotation (quaternion-based wrist rotation).
 - Milestone 6 — Two-Hand Spatial Interaction.
 - Milestone 7 — Virtual Spatial Interface.
 - Milestones 8–11 — incremental product expansion.
@@ -53,7 +60,7 @@
 
 ## Test Results
 
-- `python3 -m pytest -q`: **48 passed**.
+- `python3 -m pytest -q`: **57 passed**.
 - `python3 -m compileall src main.py tests`: OK.
 
 ## Performance Measurements
@@ -63,4 +70,4 @@
 
 ## Next Actions
 
-- Begin **Milestone 5 — Three-Dimensional Rotation** implementation plan and work.
+- Begin **Milestone 6 — Two-Hand Spatial Interaction** implementation plan and work.

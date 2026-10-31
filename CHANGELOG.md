@@ -1,5 +1,18 @@
 # Changelog — SpatialX
 
+## 0.5.0 — 2026-10-31
+
+### Added
+
+- Milestone 5 — Three-Dimensional Rotation:
+  - `spatialx.spatial.quaternion`: quaternion representation, axis-angle
+    conversion, Hamilton product, conjugate, slerp, vector rotation, slerp-based
+    rotation smoothing.
+
+### Changed
+
+- Project version bumped from 0.4.0 to 0.5.0.
+
 ## 0.4.0 — 2026-10-31
 
 ### Added
