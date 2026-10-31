@@ -1,0 +1,8 @@
+opencv-python>=4.10.0
+mediapipe>=0.10.14
+numpy>=1.26.0,<2.0.0
+scipy>=1.11.0
+
+# Development / testing
+pytest>=8.0
+pytest-cov>=4.1

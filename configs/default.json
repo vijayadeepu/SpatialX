@@ -1,0 +1,22 @@
+{
+  "camera": {
+    "device_index": 0,
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "hand": {
+    "num_hands": 2,
+    "detection_confidence": 0.5,
+    "tracking_confidence": 0.5,
+    "model_path": null
+  },
+  "interaction": {
+    "cursor_sensitivity": 1.0,
+    "smoothing": {
+      "min_cutoff": 0.005,
+      "beta": 0.003,
+      "derivative_cutoff": 0.001
+    }
+  }
+}
