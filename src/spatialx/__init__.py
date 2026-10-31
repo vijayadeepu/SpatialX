@@ -15,4 +15,4 @@ The package is organised into feature-oriented modules:
 - :mod:`spatialx.core` — cross-cutting error types and primitives.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

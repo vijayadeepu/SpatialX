@@ -2,6 +2,8 @@
 
 ## Current Milestone
 
+**Milestone 4 — First Object Manipulation: COMPLETE (software)**
+
 **Milestone 3 — Virtual 3D Cursor: COMPLETE (software)**
 
 **Milestone 2 — Spatial Coordinate Engine: COMPLETE (software)**
@@ -10,12 +12,11 @@
 
 **Milestone 0 — Environment and Project Foundation: COMPLETE**
 
-## Completed Tasks — Milestone 3
+## Completed Tasks — Milestone 4
 
-- [x] One Euro filter with configurable min cutoff, beta, derivative cutoff.
-- [x] Virtual cursor mapping hand origins to filtered positions.
-- [x] Cursor sensitivity scaling and boundary clamping.
-- [x] Cursor jitter estimation.
+- [x] Deterministic geometric gesture detection (pinch, open palm, fist).
+- [x] Interaction state machine with explicit states and transitions.
+- [x] Grab controller with hand-to-object offset and translation.
 
 ## Completed Tasks — Milestone 3
 
@@ -28,29 +29,19 @@
 
 - [x] Camera calibration model (`CameraCalibration`, camera matrix).
 - [x] Normalized landmark → camera space conversion.
-- [x] Hand-relative landmark vectors.
-- [x] Relative hand depth computation.
-- [x] Palm orientation estimation (rotation vector).
-- [x] Hand velocity computation.
+- [x] Hand-relative landmark vectors, relative depth, palm orientation, hand velocity.
 
 ## Completed Tasks — Milestone 1
 
-- [x] MediaPipe Tasks `HandLandmarker` integrated (`spatialx.vision.hand_landmarker`).
-- [x] Live detection verified against real camera frames (hand detected with high confidence).
-- [x] Two-hand support structure in place (detection limit configurable).
-- [x] 21 landmarks per hand extraction into SpatialX data model.
-- [x] Left / right hand identification.
-- [x] Skeleton visualization implemented and unit-tested.
-- [x] Tracking-loss tolerance (incomplete hands skipped).
-- [x] CLI `--detect` mode with FPS / inference reporting.
-- [x] Vision error type added (`spatialx.core.exceptions.VisionError`).
-- [x] Model asset in `assets/models/hand_landmarker.task` (offline-first).
+- [x] MediaPipe Tasks `HandLandmarker` integration.
+- [x] Landmark extraction, skeleton visualization, CLI `--detect`.
 
 ## Pending Tasks
 
-- Milestone 4 — First object manipulation.
-- Milestone 3 rendering integration: Panda3D 3D scene / virtual object.
-- Milestones 5–11 — incremental product expansion.
+- Milestone 5 — Three-Dimensional Rotation (quaternion-based wrist rotation).
+- Milestone 6 — Two-Hand Spatial Interaction.
+- Milestone 7 — Virtual Spatial Interface.
+- Milestones 8–11 — incremental product expansion.
 
 ## Known Bugs
 
@@ -62,14 +53,14 @@
 
 ## Test Results
 
-- `python3 -m pytest -q`: **22 passed** (5 foundation + 7 hand-vision + 10 spatial).
+- `python3 -m pytest -q`: **48 passed**.
+- `python3 -m compileall src main.py tests`: OK.
 
-## Performance Measurements — Milestones 1/2
+## Performance Measurements
 
 - Hand landmarker inference (MediaPipe TFLite XNNPACK CPU): mean **36.4 ms/frame**,
-  min **30.4 ms**, max **57.2 ms** (10-frame sample on this hardware).
-- Spatial math (NumPy): single-vector operations in microseconds.
+  min **30.4 ms**, max **57.2 ms**.
 
 ## Next Actions
 
-- Begin **Milestone 3 — Virtual 3D Cursor** implementation plan and work.
+- Begin **Milestone 5 — Three-Dimensional Rotation** implementation plan and work.

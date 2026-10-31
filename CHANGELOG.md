@@ -1,5 +1,18 @@
 # Changelog — SpatialX
 
+## 0.4.0 — 2026-10-31
+
+### Added
+
+- Milestone 4 — First Object Manipulation:
+  - Deterministic geometric gesture detection (`spatialx.gestures`).
+  - Interaction state machine with explicit states and transitions.
+  - Grab controller with hand-to-object offset and translation.
+
+### Changed
+
+- Project version bumped from 0.3.0 to 0.4.0.
+
 ## 0.3.0 — 2026-10-31
 
 ### Added
