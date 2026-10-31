@@ -4,6 +4,10 @@
 
 ### Added
 
+- Milestone 2 — Spatial Coordinate Engine:
+  - `spatialx.spatial.coordinates`: camera calibration, normalized landmark →
+    camera space conversion, hand-relative vectors, relative depth, palm
+    orientation, hand velocity.
 - Milestone 1 — Real-Time Hand Tracking:
   - MediaPipe Tasks `HandLandmarker` integration (`spatialx.vision.hand_landmarker`).
   - Two-hand support, 21 landmarks per hand extraction.

@@ -21,7 +21,7 @@ under `src/spatialx/`.
 | `configuration` | JSON settings loading. |
 | `core` | Errors and cross-cutting primitives. |
 
-## Current Data Flow — Milestones 0/1
+## Current Data Flow — Milestones 0/1/2
 
 ```
 main.py / CLI
@@ -30,7 +30,8 @@ main.py / CLI
         -> HandDetection (hands, timestamp_ms, inference_time_ms)
         -> TrackedHand[] (side + 21 landmarks)
         -> draw_hand_skeleton (vision module, OpenCV)
-    -> reporting (FPS, latency)
+    -> spatialx.spatial.coordinates (camera calibration, hand-relative math)
+        -> reporting (FPS, latency)
 ```
 
 Future flow inserts spatial mathematics between `HandDetection` and interaction.
