@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
-from spatialx.vision import TrackedHand
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    # Importing vision here would pull MediaPipe into every consumer of
+    # gestures (including the Panda3D rendering process). The hand objects
+    # are used duck-typed / as type hints only.
+    from spatialx.vision import TrackedHand
 
 PINCH = "PINCH"
 OPEN_PALM = "OPEN_PALM"

@@ -33,6 +33,8 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from spatialx.spatial.quaternion import Quaternion, rotation_matrix_to_quaternion
+
 if TYPE_CHECKING:  # pragma: no cover - typing only; importing vision here
     # would pull MediaPipe into every consumer (breaking the rendering
     # process — see spatialx.application.tracking_link).
@@ -272,6 +274,62 @@ def palm_orientation(
         return np.zeros(3, dtype=float)
     angle = math.atan2(axis_norm, float(np.dot(a, b)))
     return (axis / axis_norm) * angle
+
+
+def palm_frame_quaternion(
+    hand: TrackedHand,
+    image_width: float = 640.0,
+    image_height: float = 480.0,
+    mirror: bool = False,
+) -> Optional[Quaternion]:
+    """Full 3D palm orientation as a camera-space quaternion.
+
+    Builds a right-handed orthonormal palm frame from the wrist, index MCP
+    and middle MCP landmarks in isotropic camera pixel space:
+
+    - ``y``: palm "up" (wrist toward the finger knuckles, mean of index and
+      middle MCP directions).
+    - ``z``: palm normal (``wrist→index MCP`` cross ``wrist→middle MCP``).
+    - ``x``: completes the right-handed basis.
+
+    This is a full orientation (unlike :func:`palm_orientation`, which is a
+    single-axis rotation vector). It is still **not** metric: the underlying
+    landmarks use wrist-relative, width-scaled Z.
+
+    Returns:
+        A unit :class:`Quaternion`, or ``None`` when the palm geometry is
+        degenerate (missing landmarks or collinear knuckle vectors). Callers
+        should skip rotation updates on ``None`` rather than treat it as
+        identity.
+    """
+    if len(hand.landmarks) < 10:
+        return None
+    wrist = normalized_to_pixel(hand.landmarks[0], image_width, image_height, mirror)
+    index_mcp = normalized_to_pixel(hand.landmarks[5], image_width, image_height, mirror)
+    middle_mcp = normalized_to_pixel(hand.landmarks[9], image_width, image_height, mirror)
+    a = index_mcp - wrist
+    b = middle_mcp - wrist
+    if float(np.linalg.norm(a)) < 1e-9 or float(np.linalg.norm(b)) < 1e-9:
+        return None
+    y_axis = a + b
+    y_norm = float(np.linalg.norm(y_axis))
+    if y_norm < 1e-9:
+        return None
+    y_axis = y_axis / y_norm
+    normal = np.cross(a, b)
+    n_norm = float(np.linalg.norm(normal))
+    if n_norm < 1e-9:
+        return None
+    z_axis = normal / n_norm
+    x_axis = np.cross(y_axis, z_axis)
+    x_norm = float(np.linalg.norm(x_axis))
+    if x_norm < 1e-9:
+        return None
+    x_axis = x_axis / x_norm
+    # Re-orthogonalize z so the matrix is exactly orthonormal.
+    z_axis = np.cross(x_axis, y_axis)
+    rotation = np.column_stack([x_axis, y_axis, z_axis])
+    return rotation_matrix_to_quaternion(rotation)
 
 
 def hand_velocity(

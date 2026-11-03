@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum, auto
+from typing import Optional
 
 from spatialx.gestures import FIST, NONE, OPEN_PALM, PINCH, Gesture
 
@@ -48,6 +49,33 @@ class InteractionStateMachine:
     def object_available(self) -> bool:
         return self._object_available
 
+    def set_hovering(
+        self,
+        hovering: bool,
+        object_available: Optional[bool] = None,
+    ) -> InteractionState:
+        """Enter or leave :attr:`InteractionState.HOVERING`.
+
+        Only applies when the machine is in an unheld state (IDLE, TRACKING,
+        HOVERING, SELECTED). An active grab is never interrupted by hover
+        changes.
+        """
+        if object_available is None:
+            object_available = hovering or self._object_available
+        self._object_available = bool(object_available)
+        if hovering and object_available:
+            if self._state in (
+                InteractionState.IDLE,
+                InteractionState.TRACKING,
+                InteractionState.HOVERING,
+                InteractionState.SELECTED,
+            ):
+                self._state = InteractionState.HOVERING
+            return self._state
+        if self._state == InteractionState.HOVERING:
+            self._state = InteractionState.IDLE
+        return self._state
+
     def handle_gesture(
         self,
         gesture: Gesture,
@@ -62,7 +90,10 @@ class InteractionStateMachine:
 
         name = gesture.name
         if name == FIST:
-            self._state = InteractionState.PAUSED
+            # A fist while already holding an object keeps holding it
+            # (a closed hand is not an intentional release).
+            if self._state != InteractionState.GRABBING:
+                self._state = InteractionState.PAUSED
             return self._state
 
         if self._state == InteractionState.PAUSED:
@@ -80,6 +111,10 @@ class InteractionStateMachine:
                 return self._state
             if self._state == InteractionState.RELEASING:
                 self._state = InteractionState.IDLE
+                return self._state
+            if self._state == InteractionState.HOVERING:
+                # Open palm near the object stays in hover; SELECTED is the
+                # legacy no-hover-probe path (direct handle_gesture use).
                 return self._state
             self._state = (
                 InteractionState.SELECTED if object_available else InteractionState.IDLE

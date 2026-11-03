@@ -291,6 +291,7 @@ class SpatialScene:
         config = [
             f"window-type {window_type}",
             f"win-size {width} {height}",
+            "window-title SpatialX",
             "audio-library-name none",
             "sync-video false",
             "framebuffer-multisample 0",
@@ -309,8 +310,11 @@ class SpatialScene:
         self._cube: Optional[SceneObject] = None
         self._cursor: Optional[SceneObject] = None
         self._spin_enabled = False
+        self._status_text = None
         self._setup_environment()
-        self._base.accept("escape", self.close)
+        self._base.accept("escape", self.request_exit)
+        self._base.accept("q", self.request_exit)
+        self._base.accept("window-close", self.request_exit)
 
     # --- environment -------------------------------------------------------
 
@@ -329,6 +333,21 @@ class SpatialScene:
         self._base.render.attachNewNode(_build_axes_node())
         self._base.render.attachNewNode(_build_grid_node())
         self.set_camera(position=(4.5, -4.5, 3.2), target=(0.0, 0.0, 0.5))
+        if self._base.win is not None:
+            try:
+                from direct.gui.OnscreenText import OnscreenText
+                from panda3d.core import TextNode
+
+                self._status_text = OnscreenText(
+                    text="SpatialX",
+                    pos=(0.0, 0.94),
+                    scale=0.055,
+                    fg=(0.92, 0.96, 1.0, 1.0),
+                    align=TextNode.ACenter,
+                    mayChange=True,
+                )
+            except Exception:
+                self._status_text = None
 
     def set_camera(
         self,
@@ -390,6 +409,35 @@ class SpatialScene:
         """Move the cursor sphere from a camera-space hand position."""
         if self._cursor is not None:
             self._cursor.set_position_camera_space(position_camera)
+
+    def set_cursor_visible(self, visible: bool) -> None:
+        """Show or hide the cursor (tracking-status feedback)."""
+        if self._cursor is None:
+            return
+        if visible:
+            self._cursor.node.show()
+        else:
+            self._cursor.node.hide()
+
+    def set_cursor_color(self, r: float, g: float, b: float) -> None:
+        """Tint the cursor marker (hover / grab feedback)."""
+        if self._cursor is not None:
+            self._cursor.set_color(float(r), float(g), float(b))
+
+    def set_status_text(self, text: str) -> None:
+        """Update the on-screen status line (no-op without a window)."""
+        if self._status_text is not None:
+            self._status_text.setText(text)
+
+    def request_exit(self) -> None:
+        """Ask the ShowBase loop to stop (Escape / 'q' / window close)."""
+        try:
+            self._base.userExit()
+        except SystemExit:
+            raise
+        except Exception:
+            # Some Panda3D builds tear the window down without raising.
+            pass
 
     # --- rendering loop ----------------------------------------------------
 
@@ -454,6 +502,12 @@ class SpatialScene:
     def close(self) -> None:
         """Destroy the scene and its graphics resources."""
         self._spin_enabled = False
+        if self._status_text is not None:
+            try:
+                self._status_text.destroy()
+            except Exception:
+                pass
+            self._status_text = None
         try:
             self._base.destroy()
         except Exception:

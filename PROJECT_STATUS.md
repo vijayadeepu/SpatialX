@@ -1,121 +1,130 @@
 # Project Status — SpatialX
 
-## Current Milestone
+## Current milestone / version
 
-**Audit repair pass in progress (M0–M5 re-verification). Priority 1 COMPLETE.**
+**v0.6.0 — interaction prototype.** Priorities 1–5 are implemented.
+A scripted live hand acceptance (cursor follow, grab, translate, rotate,
+20+ cycles) was **not** completed. The first camera frame was black; a
+later 5-minute probe saw transient hand detections. See the matrix.
 
-## Audit Priorities (user-directed repair pass)
+Last full-suite result: **123 passed** (`python3 -m pytest -q`).
 
-- [x] **Priority 1 — Fix real hand tracking**: model asset path resolution fixed,
-  verified, and regression-tested (details below).
-- [x] **Priority 2 — Correct spatial mathematics**: conventions fixed, honest
-  depth semantics, mirroring added, orientation math corrected (details below).
-- [ ] Priority 3 — Implement real 3D rendering (Panda3D).
-- [ ] Priority 4 — Complete object translation (rendered cube grab/move).
-- [ ] Priority 5 — Complete object rotation (scene-wired orientation).
-- [ ] Priority 6 — Regression testing (full coverage pass).
-- [ ] Priority 7 — Documentation matching reality.
+## Priority completion matrix
 
-## Priority 1 Results (2026-10-31)
+| Priority | Status | Evidence | Remaining limitations |
+|---|---|---|---|
+| P1 Hand tracking | **PARTIAL** | Model resolution, BGR→RGB, worker inference and IPC verified (`tests/test_vision.py`, `tests/test_tracking_link.py`). 5-minute probe: MediaPipe reported hands on **855/2950** frames, so the detector does fire on this machine. No controlled hand-in-view session (landmarks, handedness, gesture names, 300/300) was captured. Historical 300/300 two-hand run (2026-10-31) is not reproduced. | Needs a kept-in-view hand to re-confirm landmarks, gestures and tracking continuity. |
+| P2 Spatial math | **PASS** (code/tests) | 123-test suite includes mirroring, relative-depth semantics, palm frame, quaternion roundtrips. Module docstrings state Z is wrist-relative and **not** metric. | Live coordinate numbers from a real hand are NOT VERIFIED this session. |
+| P3 Real-time tracking + rendering | **PARTIAL** | `spatialx --render-demo` opened an 800×600 GLX window, started the worker, published v1 JSON states (197 states / 25 s, 0 hands), hid the cursor, kept the cube at rest, and exited cleanly on `q` with no orphan processes and no camera lock. Render FPS ≈ 66 onscreen. **Cursor following a real hand is NOT VERIFIED.** | Needs a hand in view to confirm X/Y following, mirroring and bounds. |
+| P4 Object translation | **PARTIAL** | `GrabController` + scene-graph integration test: hover → pinch grab, offset preserved (no jump), translate, release keeps last pose, bounds clamp, tracking-loss freeze. **Real-webcam grab/move/release is NOT VERIFIED.** Relative-Z translation is a documented limitation. | Hardware acceptance (20+ cycles) blocked by camera. |
+| P5 Object rotation | **PARTIAL** | Full palm-frame quaternion, relative world-space delta, slerp smoothing, degenerate-input skip, release preserves orientation. Scene-graph test applies rotation to the actual cube node. **Real-webcam palm rotation is NOT VERIFIED.** | Hardware acceptance (20+ cycles, axis direction) blocked by camera. |
+| P6 Integration / regression | **PARTIAL** | 123 tests pass; compileall clean; worker startup/IPC/teardown verified; 5-minute worker probe (see Performance). Hardware end-to-end acceptance scenario is incomplete. | Live grab/translate/rotate/release sequence not demonstrated. |
+| P7 Docs / release | **PARTIAL** | README, ARCHITECTURE, CHANGELOG and this file updated to match the implementation. Version bumped to 0.6.0. **No LICENSE file; license decision required.** No git commit made automatically. | License, tagged release, and hardware re-verification still open. |
 
-**Bug 1 — model asset path (fixed):** `DEFAULT_MODEL_PATH` in
-`src/spatialx/vision/hand_landmarker.py` resolved to
-`<repo>/src/assets/models/hand_landmarker.task` (`parents[2]` = `src`),
-a nonexistent path. The real asset is at `<repo>/assets/models/`.
+Status labels: **PASS** = implemented and verified against acceptance
+criteria · **PARTIAL** = some functionality works, acceptance incomplete ·
+**FAIL** = broken · **NOT VERIFIED** = no evidence.
 
-**Fix 1:**
-- `resolve_model_path()` — verified resolution: explicit `--model-path` arg →
-  `SPATIALX_MODEL_PATH` env var → package assets dir → repo-root
-  `assets/models/` (walk-up). Every candidate is checked for existence and
-  non-empty size; a missing model raises `VisionError` listing all searched
-  locations plus the download URL.
-- `HandLandmarker()` now auto-resolves the model (default `model_path=None`).
-- CLI resolves/validates the model **before** opening the camera (clear error,
-  exit code 4) and reports the resolved model path at runtime.
+## What was verified on this machine
 
-**Bug 2 — BGR/RGB channel order (fixed):** `HandLandmarker.detect()` wrapped the
-raw OpenCV **BGR** frame as `ImageFormat.SRGB` without conversion. Diagnosed on
-a live frame: BGR-as-SRGB → 0 hands; converted RGB → 1 hand on the same frame.
-Fixed with `cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)` inside `detect()`.
+- `/dev/video0` opens (640×480). The first grabbed frame was nearly
+  black. During the 5-minute probe MediaPipe reported hands on 855
+  frames, so the sensor/detector path is not dead.
+- Worker process starts, loads the model, publishes `{"v":1,"type":"state",...}`.
+  With no hand: `hands=0`, `gesture=NONE`, `cursor_camera=null`.
+- `--render-demo` window titled `SpatialX` (800×600) appeared in
+  `wmctrl` / `xwininfo`.
+- Sending `q` to the window stopped the app, reaped the worker, released
+  `/dev/video0`, and removed the window.
+- Cube remained at its initial camera-space pose `[0, -100, 0]` when no
+  hand was present (`LOST_TRACKING`).
+- Cursor was hidden while tracking was lost.
+- Synthetic scene-graph test drives the real Panda3D nodes through
+  grab → translate → rotate → release (see
+  `tests/test_runtime_integration.py`).
+- Offscreen screenshot (`--render-screenshot`) writes a PNG via the EGL
+  pipe (TinyDisplay is not installed; Panda3D falls back).
 
-**Verified:**
-- 7 new regression tests in `tests/test_vision.py` (path resolution, env
-  override, missing-model errors, default initialization + blank-frame infer,
-  BGR→RGB conversion).
-- Full suite: **64 passed**; `compileall` clean.
-- Real end-to-end run: `spatialx --detect --frames 5` →
-  `model=.../assets/models/hand_landmarker.task frames_captured=5
-  avg_inference_ms=46.22`.
-- **Live hand detection (hardware-verified):** 30 s / 300-frame run with both
-  hands in view → hands detected on **300/300 frames** (554 hand instances,
-  LEFT + RIGHT), 21-landmark skeleton overlay saved and visually verified.
-  Live inference mean **69.0 ms/frame** with two hands (min 47.4, max 125.9);
-  single-hand/empty-scene mean 41–42 ms.
+## What could not be verified
 
-## Priority 2 Results (2026-10-31)
+- A scripted live session: cursor following, PINCH grab, translation,
+  palm rotation, release, 20+ cycles.
+- Gesture stability of PINCH / OPEN_PALM / FIST on continuously visible
+  landmarks.
+- Tracking-to-render latency with a moving hand.
 
-**Defects found and corrected in `src/spatialx/spatial/coordinates.py`:**
+The 5-minute probe observed `hands > 0` on 855/2950 frames (transient),
+so the sensor can see a hand, but no interactive manipulation was
+demonstrated or recorded.
 
-1. **Incoherent camera-space units** (critical): old `landmark_camera_space`
-   computed `(x_norm·W − cx)·fx/W` — a unit hybrid — and returned X/Y with no
-   depth while Z carried wrist-relative `z`, so the vector was not a point in
-   any consistent 3D frame. Corrected to honest camera pixel space:
-   `[u − cx, v − cy, z·W]` (principal-point origin, width-scaled
-   wrist-relative Z).
-2. **Aspect-ratio scale mixing** (critical): normalized `x` is per-width and
-   `y` per-height, so distances/cross-products on raw normalized coordinates
-   were distorted (4:3 at 640×480). All geometry now computes in isotropic
-   pixel space; regression test proves the pixel-space angle differs from the
-   normalized-space angle.
-3. **`palm_orientation` axis not unit-normalized**: returned `axis·angle` with
-   `|axis| = |a||b|sinθ ≠ 1`, corrupting rotation-vector magnitude (and thus
-   quaternion conversion). Corrected to unit axis × angle via `atan2`.
-4. **`relative_depth` duplicated `hand_relative_vectors`**: now returns the
-   1-D wrist-relative, width-scaled depth offsets its name promises.
-5. **No mirroring support**: added `mirror=True` option (u → W−u) through
-   `normalized_to_pixel`, `landmark_camera_space`, `hand_relative_vectors`,
-   `palm_orientation`; CLI cursor demo uses selfie mirroring.
-6. **`CameraCalibration` sloppy defaults**: `rotation`/`translation` are
-   typed Optionals with `effective_*` accessors (identity/zero); added
-   `for_image(width, height, hfov_degrees=60)` nominal constructor —
-   documented as an assumption, not a measured calibration.
-7. **Honesty**: no metric depth is ever produced; module docstrings state
-   Z is wrist-relative and width-scaled, valid for relative comparisons only.
+## Performance (measured this session)
 
-**Verified:**
-- 13 spatial tests rewritten/added (mirroring, ray unit-norm, known-angle
-  orientation, aspect-ratio regression, depth semantics, `for_image`).
-- Full suite: **75 passed**; `compileall` clean.
-- Live hardware run (hand in view): wrist camera space `[193, 253.5, 0]` px;
-  index-tip offset `[−110.3, −283.0, −69.0]` px (311.5 px norm); monotonic
-  fingertip depth offsets (−12.8 → −57.2 px, closer than wrist); palm tilt
-  9.9° → unit quaternion (norm 1.000000); unit ray `[−0.147, −0.052, 0.988]`.
-- `spatialx --cursor-demo --frames 30` on live data: 23 cursor positions,
-  final `[208.7, 197.3, 0.0002]` px, jitter 0.0079.
+Numbers below are measured, not estimated.
 
-## Environment Status
+### 5-minute tracking-worker probe (`/tmp/opencode/sx/perf.json`)
 
-- **Camera restored and hardware-verified**: `/dev/video0` (640x480) captures at
-  ~9–19 FPS; live two-hand landmark detection confirmed.
-- Panda3D/PySide6 not yet installed (Priority 3 scope).
-- Working tree note: unrelated pre-existing (uncommitted) changes remain in
-  `src/spatialx/spatial/quaternion.py` / `__init__.py` (`relative_rotation`);
-  preserved, not part of Priority 1, not committed.
+Duration 300 s, `target_fps=20`, camera 0. No interactive grab session.
 
-## Test Results
+| Metric | Value |
+|---|---|
+| Startup to first state | **4.61 s** (model + camera open) |
+| Worker states | 2950 |
+| Worker publish rate | **9.83 Hz** (camera ~10 FPS, interval 100.2 ms) |
+| Frames with `hands > 0` | 855 / 2950 (transient presence; no grab session) |
+| Inference mean / median | **57.1 ms / 53.6 ms** |
+| Inference p95 / min / max | 98.7 / 28.0 / 162.3 ms |
+| Worker CPU | **66.6 %** of one core |
+| Worker RSS mean / max | **699 MB / 700 MB** |
+| Errors | none |
+| Clean shutdown | yes |
 
-- `python3 -m pytest -q`: **75 passed**.
-- `python3 -m compileall src main.py tests`: OK.
-- Model asset verified: `assets/models/hand_landmarker.task`, 7,819,105 bytes.
+The 855 hand frames show the camera was not black for the entire five
+minutes, but no person performed a scripted grab/translate/rotate session
+and nothing was recorded. Live manipulation remains NOT VERIFIED.
 
-## Performance Measurements
+### Rendering (separate process, no camera)
 
-- Hand landmarker inference, two hands live: mean **69.0 ms/frame**
-  (300-frame sample), min 47.4, max 125.9.
-- Hand landmarker inference, empty/single-hand scene: mean **41–42 ms/frame**.
-- Historic (pre-repair) measurement: mean 36.4 ms (single hand, BGR path).
+| Metric | Value | Method |
+|---|---|---|
+| Scene startup | **0.29 s** | `SpatialScene(onscreen)` to ready |
+| Onscreen render FPS | **66.6 FPS** | 300 `taskMgr.step()` frames, GLX 800×600 |
+| Offscreen screenshot | works | EGL pipe (TinyDisplay `.so` is not installed; Panda3D falls back) |
+| Tracking→render latency | NOT VERIFIED | needs a moving hand |
+| Historic two-hand inference | 69.0 ms mean (2026-10-31) | not reproduced this session |
 
-## Next Actions
+## Environment
 
-- **Priority 3** — real 3D rendering with Panda3D (scene, camera, axes,
-  cursor, cube, transform system; rendering/tracking separation).
+- Linux, X11 (`DISPLAY=:0`), XFCE.
+- Python 3.12, OpenCV 4.11.0, MediaPipe (CPU/XNNPACK), Panda3D 1.10.16.
+- NumPy <2.0, SciPy.
+- PySide6 is **not** installed and is not required by the current app.
+- Model: `assets/models/hand_landmarker.task` (7,819,105 bytes).
+- Camera: `/dev/video0` + `/dev/video1` (UVC). First frame was black;
+  the 5-minute probe still saw transient hand detections.
+
+## Architecture invariants (do not break)
+
+- MediaPipe / OpenCV stay in `spatialx.application.tracking_worker`.
+- Panda3D stays in the parent process (`spatialx.rendering`).
+- IPC is newline-delimited JSON on the worker’s stdout; stdout is
+  protocol-only (logs go to stderr).
+- `spatialx.gestures` must **not** import `spatialx.vision` at runtime
+  (TYPE_CHECKING only), or the rendering process loads MediaPipe.
+- Rendering never imports vision internals.
+
+## Next actions
+
+1. Re-run live hand verification once a visible camera is available
+   (P3 cursor follow, P4 grab/translate, P5 rotate, 20+ cycles each).
+2. Decide the license and add a `LICENSE` file.
+3. Optional: expose a short `--selftest` that reports camera black-frame
+   / hand-presence so this blocker is obvious to the next operator.
+4. Do **not** start Milestone 6 (two-hand interaction).
+
+## Test inventory (this session)
+
+- Baseline at session start: **85 passed**.
+- Added: interaction runtime, palm frame, quaternion normalize/matrix,
+  scene-graph manipulation, MediaPipe-free import, worker protocol,
+  missing-camera error path.
+- Final: **123 passed**, 0 failed, 0 skipped.

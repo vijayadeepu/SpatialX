@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Sequence, Optional
 
 from spatialx.core.exceptions import CameraError, VisionError
 from spatialx.spatial import CameraCalibration, landmark_camera_space
+from spatialx import __version__
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from spatialx.camera import CameraManager
@@ -20,6 +21,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="spatialx",
         description="SpatialX — camera-based 3D human spatial interaction platform.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"SpatialX {__version__}",
     )
     parser.add_argument(
         "--camera-index",
@@ -63,6 +69,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="Cursor sensitivity multiplier (default: 1.0).",
+    )
+    parser.add_argument(
+        "--hover-radius",
+        type=float,
+        default=160.0,
+        help=(
+            "Hover radius in camera-space pixels: the cursor must be within "
+            "this distance of the cube to grab it (default: 160)."
+        ),
+    )
+    parser.add_argument(
+        "--tracking-fps",
+        type=float,
+        default=30.0,
+        help="Maximum tracking-worker publish rate in FPS (default: 30).",
     )
     parser.add_argument(
         "--preview",
@@ -267,51 +288,174 @@ def _run_render_screenshot(path: str) -> int:
 
 
 def _run_render_demo(args) -> int:
-    """Interactive 3D demo: hand-tracked cursor + virtual cube.
+    """Interactive 3D demo: hand-tracked cursor, cube grab/translate/rotate.
 
     Rendering runs in this process (Panda3D, onscreen GLX); camera and
     MediaPipe tracking run in an isolated subprocess (TrackingClient) to
-    avoid the MediaPipe/Panda3D runtime clash.
+    avoid the MediaPipe/Panda3D runtime clash. Interaction (hover, grab,
+    translation, rotation) runs in this process on plain numpy/quaternion
+    data — never on MediaPipe or Panda3D objects.
 
     Returns:
-        Process exit code: 0 on quit, 2 camera error, 4 vision error.
+        Process exit code: 0 on quit, 2 camera/worker error, 4 vision error.
     """
+    import numpy as np
+
     from spatialx.application.tracking_link import TrackingClient
-    from spatialx.rendering import SpatialScene
+    from spatialx.interaction import GrabController, GrabbableObject
+    from spatialx.motion import OneEuroFilter
+    from spatialx.rendering import SpatialScene, VirtualCursor
+    from spatialx.spatial.quaternion import Quaternion, quaternion_normalized
+
+    def quat_from_payload(values) -> Optional[Quaternion]:
+        if not isinstance(values, (list, tuple)) or len(values) != 4:
+            return None
+        try:
+            return quaternion_normalized(
+                Quaternion(*(float(v) for v in values))
+            )
+        except (TypeError, ValueError):
+            return None
 
     scene = SpatialScene(window_type="onscreen", width=800, height=600)
     cube = scene.add_cube(size=1.0)
     scene.add_cursor()
-    scene.enable_cube_spin(degrees_per_second=25.0)
+    scene.set_cursor_visible(False)
+
+    controller = GrabController(
+        hover_radius=float(args.hover_radius),
+        stable_frames=2,
+        lost_grace_s=1.2,
+        rotation_smoothing=0.35,
+    )
+    controller.register_object(
+        GrabbableObject(
+            object_id="cube",
+            position=cube.get_position_camera_space(),
+        )
+    )
+
+    # Interactive One Euro settings: responsive enough to follow the hand
+    # without the library-default heavy smoothing (which is tuned for
+    # offline jitter metrics, not live manipulation).
+    cursor = VirtualCursor(
+        filter=OneEuroFilter(min_cutoff=1.2, beta=0.025, derivative_cutoff=1.0),
+        sensitivity=float(args.cursor_sensitivity),
+        bounds=(
+            np.array([-340.0, -260.0, -120.0]),
+            np.array([340.0, 260.0, 120.0]),
+        ),
+    )
+
     client = TrackingClient(
         camera_index=args.camera_index,
         model_path=args.model_path,
         num_hands=args.num_hands,
         mirror=True,
+        target_fps=float(args.tracking_fps),
     )
-    latest = {"error": None, "state": None}
+    latest_error: Optional[dict] = None
+    last_seen_timestamp: Optional[float] = None
+    last_shown_state = [None]
+    last_frame_stats = {
+        "states": 0,
+        "frames": 0,
+        "inference_ms": [],
+        "start": time.monotonic(),
+    }
+
+    def apply_scene() -> None:
+        obj = controller.primary_object
+        if obj is not None:
+            cube.set_position_camera_space(obj.position)
+        if controller.display_orientation is not None:
+            cube.set_orientation(controller.display_orientation)
+        state = controller.state_machine.state
+        if state.name == "GRABBING":
+            cube.set_color(0.95, 0.55, 0.15)
+            scene.set_cursor_color(1.0, 0.55, 0.15)
+        elif state.name == "HOVERING":
+            cube.set_color(0.25, 0.85, 0.45)
+            scene.set_cursor_color(0.3, 0.9, 0.95)
+        elif state.name == "PAUSED":
+            cube.set_color(0.6, 0.6, 0.65)
+            scene.set_cursor_color(0.7, 0.7, 0.75)
+        else:
+            cube.set_color(0.25, 0.6, 0.9)
+            scene.set_cursor_color(1.0, 0.85, 0.2)
+
+    def process_state(state: dict) -> None:
+        nonlocal last_seen_timestamp
+        last_frame_stats["states"] += 1
+        if state.get("type") == "error":
+            nonlocal latest_error
+            latest_error = state
+            scene.request_exit()
+            return
+        if state.get("type") != "state":
+            return
+        timestamp = state.get("timestamp")
+        cursor_camera = state.get("cursor_camera")
+        if cursor_camera is not None:
+            raw = np.asarray(cursor_camera, dtype=float).reshape(3)
+            if (
+                last_seen_timestamp is None
+                or timestamp is None
+                or timestamp - last_seen_timestamp > 0.5
+            ):
+                cursor.reset()
+            last_seen_timestamp = timestamp
+            filtered = cursor.update(
+                raw, timestamp_s=timestamp if timestamp is not None else None
+            )
+            scene.update_cursor(filtered)
+            scene.set_cursor_visible(True)
+        else:
+            scene.set_cursor_visible(False)
+            if last_seen_timestamp is not None and timestamp is not None:
+                if timestamp - last_seen_timestamp > 0.5:
+                    cursor.reset()
+        if cursor_camera is not None:
+            last_frame_stats["frames"] += 1
+        inference = state.get("inference_ms")
+        if isinstance(inference, (int, float)):
+            last_frame_stats["inference_ms"].append(float(inference))
+        controller.process_frame(
+            cursor_camera=(
+                np.asarray(cursor_camera, dtype=float).reshape(3)
+                if cursor_camera is not None
+                else None
+            ),
+            gesture_name=str(state.get("gesture") or "NONE"),
+            orientation=quat_from_payload(state.get("orientation")),
+            timestamp_s=timestamp if timestamp is not None else None,
+        )
+        apply_scene()
+        interaction_state = controller.state_machine.state.name
+        if interaction_state != last_shown_state[0]:
+            last_shown_state[0] = interaction_state
+            print(
+                f"SpatialX state: {interaction_state} "
+                f"gesture={state.get('gesture')} hover={controller.hovering}"
+            )
+        scene.set_status_text(
+            f"state={interaction_state}  gesture={state.get('gesture')}  "
+            f"hands={state.get('hands')}  hover={controller.hovering}"
+        )
 
     def update(_dt: float) -> None:
-        state = client.latest_state(timeout=0.0)
-        if state is None:
-            return
-        if state.get("type") == "error":
-            latest["error"] = state
-            scene.base.userExit()
-            return
-        latest["state"] = state
-        if state.get("cursor_camera") is not None:
-            scene.update_cursor(state["cursor_camera"])
-        gesture = state.get("gesture")
-        if gesture == "FIST":
-            scene.set_cube_spin(False)
-            cube.set_color(0.85, 0.3, 0.25)
-        elif gesture == "PINCH":
-            scene.set_cube_spin(True)
-            cube.set_color(0.3, 0.85, 0.4)
-        elif gesture == "OPEN_PALM":
-            scene.set_cube_spin(True)
-            cube.set_color(0.25, 0.6, 0.9)
+        messages = client.drain_messages(timeout=0.0)
+        for message in messages:
+            process_state(message)
+        if not client.running and latest_error is None:
+            # Worker died without an error frame.
+            process_state(
+                {
+                    "type": "error",
+                    "kind": "worker",
+                    "message": "tracking worker is no longer running",
+                }
+            )
 
     # Wait briefly for the worker's first message so startup errors
     # (camera/model) surface before entering the interactive loop.
@@ -319,26 +463,44 @@ def _run_render_demo(args) -> int:
     if first is not None and first.get("type") == "error":
         print(f"SpatialX tracking error: {first.get('message')}")
         client.close()
-        return 2 if first.get("kind") == "camera" else 4
-    latest["state"] = first
+        scene.close()
+        return 2 if first.get("kind") in ("camera", "worker") else 4
+    if first is not None:
+        process_state(first)
 
     print(
-        "SpatialX render demo: show a hand to move the yellow cursor; "
-        "FIST pauses the cube (red), PINCH spins it (green), "
-        "OPEN_PALM resets it (blue). Press Escape or close the window to quit."
+        "SpatialX render demo: move your hand to drive the yellow cursor. "
+        "Hover near the cube and PINCH to grab; move to translate; rotate "
+        "your palm to rotate the cube; OPEN_PALM to release. FIST pauses. "
+        "Press Escape or q to quit."
     )
     try:
         scene.run(update)
     except SystemExit:
-        # Panda3D's window-close/escape path invokes sys.exit() internally;
-        # the demo ends normally either way.
+        # Panda3D's window-close/escape path invokes sys.exit() internally.
         pass
     finally:
         client.close()
-    error = latest["error"]
-    if error is not None:
-        print(f"SpatialX tracking error: {error.get('message')}")
-        return 2 if error.get("kind") == "camera" else 4
+        elapsed = max(time.monotonic() - last_frame_stats["start"], 1e-6)
+        inference = last_frame_stats["inference_ms"]
+        avg_inference = (
+            sum(inference) / len(inference) if inference else 0.0
+        )
+        print(
+            "SpatialX render demo summary: "
+            f"states={last_frame_stats['states']} "
+            f"frames_with_hand={last_frame_stats['frames']} "
+            f"elapsed_s={elapsed:.1f} "
+            f"avg_inference_ms={avg_inference:.1f} "
+            f"final_state={controller.state_machine.state.name} "
+            f"final_cube_camera="
+            f"{np.round(controller.primary_object.position, 1).tolist() if controller.primary_object else None}"
+        )
+        scene.close()
+
+    if latest_error is not None:
+        print(f"SpatialX tracking error: {latest_error.get('message')}")
+        return 2 if latest_error.get("kind") in ("camera", "worker") else 4
     return 0
 
 
@@ -409,3 +571,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     finally:
         manager.close()
     return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - entry point
+    raise SystemExit(main())

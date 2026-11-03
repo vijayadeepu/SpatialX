@@ -13,6 +13,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RESULT_PREFIX = "RESULT_JSON:"
 
@@ -98,6 +100,9 @@ def _run_client_script(tmp_path: Path, timeout: int = 120) -> dict:
 
 def test_tracking_client_delivers_states_from_worker(tmp_path: Path) -> None:
     result = _run_client_script(tmp_path)
+    if not result.get("ok") and result.get("kind") == "camera":
+        # Exclusive device: another probe/instance may hold /dev/video0.
+        pytest.skip(f"camera unavailable: {result.get('error')}")
     assert result["ok"] is True, result
     assert result["n_states"] >= 3
     assert result["cursor_ok"] is True, result

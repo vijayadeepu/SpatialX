@@ -91,6 +91,61 @@ def smooth_rotation(q1: Quaternion, q2: Quaternion, smoothing: float = 0.5) -> Q
     return slerp(q1, q2, smoothing)
 
 
+def quaternion_normalized(q: Quaternion) -> Quaternion:
+    """Return a unit-norm copy of ``q`` (identity when degenerate)."""
+    norm = math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+    if norm < 1e-12:
+        return Quaternion(w=1.0, x=0.0, y=0.0, z=0.0)
+    return Quaternion(w=q.w / norm, x=q.x / norm, y=q.y / norm, z=q.z / norm)
+
+
+def quaternion_to_rotation_matrix(q: Quaternion) -> np.ndarray:
+    """Convert a unit quaternion to a 3x3 rotation matrix."""
+    quat = quaternion_normalized(q)
+    w, x, y, z = quat.w, quat.x, quat.y, quat.z
+    return np.array(
+        [
+            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - w * z), 2.0 * (x * z + w * y)],
+            [2.0 * (x * y + w * z), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - w * x)],
+            [2.0 * (x * z - w * y), 2.0 * (y * z + w * x), 1.0 - 2.0 * (x * x + y * y)],
+        ],
+        dtype=float,
+    )
+
+
+def rotation_matrix_to_quaternion(matrix: np.ndarray) -> Quaternion:
+    """Convert a 3x3 rotation matrix to a unit quaternion (Shepperd)."""
+    m = np.asarray(matrix, dtype=float).reshape(3, 3)
+    trace = float(m[0, 0] + m[1, 1] + m[2, 2])
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        w = 0.25 * s
+        x = (m[2, 1] - m[1, 2]) / s
+        y = (m[0, 2] - m[2, 0]) / s
+        z = (m[1, 0] - m[0, 1]) / s
+    elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
+        s = math.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2.0
+        w = (m[2, 1] - m[1, 2]) / s
+        x = 0.25 * s
+        y = (m[0, 1] + m[1, 0]) / s
+        z = (m[0, 2] + m[2, 0]) / s
+    elif m[1, 1] > m[2, 2]:
+        s = math.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2.0
+        w = (m[0, 2] - m[2, 0]) / s
+        x = (m[0, 1] + m[1, 0]) / s
+        y = 0.25 * s
+        z = (m[1, 2] + m[2, 1]) / s
+    else:
+        s = math.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2.0
+        w = (m[1, 0] - m[0, 1]) / s
+        x = (m[0, 2] + m[2, 0]) / s
+        y = (m[1, 2] + m[2, 1]) / s
+        z = 0.25 * s
+    return quaternion_normalized(Quaternion(w=w, x=x, y=y, z=z))
+
+
 def relative_rotation(q_self: Quaternion, q_other: Quaternion) -> Quaternion:
-    """Rotation that takes the orientation of ``q_self`` to ``q_other``."""
-    return quaternion_multiply(q_other, quaternion_conjugate(q_self))
+    """World-space rotation that takes orientation ``q_self`` to ``q_other``."""
+    return quaternion_normalized(
+        quaternion_multiply(q_other, quaternion_conjugate(q_self))
+    )

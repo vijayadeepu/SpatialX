@@ -55,6 +55,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _build_parser().parse_args(argv)
 
     def emit(payload) -> None:
+        payload = {"v": 1, **payload}
         sys.stdout.write(json.dumps(payload) + "\n")
         sys.stdout.flush()
 
@@ -66,9 +67,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     from spatialx.spatial.coordinates import (
         CameraCalibration,
         landmark_camera_space,
-        palm_orientation,
+        palm_frame_quaternion,
     )
-    from spatialx.spatial.quaternion import rotation_vector_to_quaternion
     from spatialx.vision import HandLandmarker, resolve_model_path
 
     try:
@@ -84,7 +84,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 4
 
     manager = CameraManager(device_index=args.camera_index)
-    if not manager.open():
+    try:
+        manager.open()
+    except CameraError as error:
+        emit(
+            {
+                "type": "error",
+                "kind": "camera",
+                "message": str(error),
+            }
+        )
+        return 2
+    if not manager.is_open():
         emit(
             {
                 "type": "error",
@@ -114,15 +125,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         while True:
             if _stdin_quit_requested():
                 break
-            frame = manager.read()
+            try:
+                frame = manager.read()
+            except CameraError as error:
+                emit(
+                    {
+                        "type": "error",
+                        "kind": "camera",
+                        "message": str(error),
+                    }
+                )
+                break
             if frame is None:
                 time.sleep(0.01)
                 continue
             started = time.monotonic()
-            detection = landmarker.detect(
-                frame.image,
-                timestamp_ms=int(round(frame.timestamp * 1000)),
-            )
+            try:
+                detection = landmarker.detect(
+                    frame.image,
+                    timestamp_ms=int(round(frame.timestamp * 1000)),
+                )
+            except VisionError as error:
+                emit(
+                    {
+                        "type": "error",
+                        "kind": "vision",
+                        "message": str(error),
+                    }
+                )
+                break
             state = {
                 "type": "state",
                 "timestamp": frame.timestamp,
@@ -147,25 +178,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     image_height=frame.height,
                     mirror=args.mirror,
                 )
-                orientation = rotation_vector_to_quaternion(
-                    palm_orientation(
-                        hand,
-                        image_width=frame.width,
-                        image_height=frame.height,
-                        mirror=args.mirror,
-                    )
+                palm_quat = palm_frame_quaternion(
+                    hand,
+                    image_width=frame.width,
+                    image_height=frame.height,
+                    mirror=args.mirror,
                 )
                 gesture = detect_gesture(list(detection.hands))
                 state.update(
                     {
                         "handedness": hand.handedness,
                         "cursor_camera": [float(v) for v in wrist],
-                        "orientation": [
-                            float(orientation.w),
-                            float(orientation.x),
-                            float(orientation.y),
-                            float(orientation.z),
-                        ],
+                        "orientation": (
+                            None
+                            if palm_quat is None
+                            else [
+                                float(palm_quat.w),
+                                float(palm_quat.x),
+                                float(palm_quat.y),
+                                float(palm_quat.z),
+                            ]
+                        ),
                         "gesture": gesture.name,
                     }
                 )

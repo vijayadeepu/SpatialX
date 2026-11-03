@@ -108,7 +108,50 @@ class TrackingClient:
                 break
             if remaining <= 0.0:
                 break
+        if newest is None and self._process.poll() is not None:
+            return self._worker_exited_message()
         return newest
+
+    def drain_messages(self, timeout: float = 0.0) -> list[dict]:
+        """Return every pending protocol message, oldest first.
+
+        Unlike :meth:`latest_state`, intermediate states are preserved so
+        gesture debouncing can run at camera rate even when the render loop
+        is faster than the worker.
+        """
+        if self._closed or self._process.stdout is None:
+            return []
+        messages: list[dict] = []
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            remaining = deadline - time.monotonic()
+            wait = max(0.0, remaining) if not messages else 0.0
+            line = self._read_line(wait)
+            if line is None:
+                break
+            try:
+                message = json.loads(line)
+            except ValueError:
+                continue
+            messages.append(message)
+            if message.get("type") == TRACKING_MESSAGE_ERROR:
+                break
+            if remaining <= 0.0:
+                break
+        if not messages and self._process.poll() is not None:
+            messages.append(self._worker_exited_message())
+        return messages
+
+    def _worker_exited_message(self) -> dict:
+        return {
+            "v": 1,
+            "type": TRACKING_MESSAGE_ERROR,
+            "kind": "worker",
+            "message": (
+                "tracking worker exited unexpectedly "
+                f"(returncode={self._process.returncode})"
+            ),
+        }
 
     def _read_line(self, timeout: float) -> Optional[str]:
         """Read one stdout line with a timeout; ``None`` on timeout/EOF."""

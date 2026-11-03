@@ -1,12 +1,17 @@
 # Documentation Index — SpatialX
 
-Planned / in-progress documentation:
+Primary documents live in the repository root:
 
-- `docs/technical-decisions/` — ADRs for significant technical choices.
-- `docs/coordinates.md` — camera / world / hand-relative coordinate conventions.
-- `docs/gestures.md` — gesture definitions and thresholds.
-- `docs/calibration.md` — calibration procedures.
-- `docs/testing.md` — testing strategy and procedures.
-- `docs/integrations.md` — integration guides (Blender, CAD, game engines).
+- [`README.md`](../README.md) — overview, install, CLI, limitations.
+- [`PROJECT_STATUS.md`](../PROJECT_STATUS.md) — verified status and evidence.
+- [`ARCHITECTURE.md`](../ARCHITECTURE.md) — modules, IPC, coordinates, lifecycle.
+- [`CHANGELOG.md`](../CHANGELOG.md) — change history.
 
-Initial content: none yet — documents are created alongside their milestones.
+Planned / in-progress (not yet written):
+
+- `docs/technical-decisions/` — ADRs.
+- `docs/coordinates.md` — longer coordinate write-up (summary is in ARCHITECTURE).
+- `docs/gestures.md` — gesture thresholds.
+- `docs/calibration.md` — calibration procedures (none yet; intrinsics are nominal).
+- `docs/testing.md` — testing strategy (summary is in ARCHITECTURE).
+- `docs/integrations.md` — Blender / CAD / game-engine adapters.
